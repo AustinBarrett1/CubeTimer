@@ -1,0 +1,48 @@
+# Build outputs
+/bin/
+/obj/
+
+# Rider-specific files
+.idea/
+.idea.CubeTimer.iml
+modules.xml
+contentModel.xml
+workspace.xml
+shelf/
+projectSettingsUpdater.xml
+
+# VS-specific files
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp
+*.bak
+
+# NuGet packages
+/packages/
+
+# Generated files
+*.g.*
+*.gen.cs
+
+# Static web assets
+/wwwroot/dist/
+/wwwroot/node_modules/
+
+# Datasource and HTTP requests
+/httpRequests/
+/dataSources/
+dataSources.local.xml

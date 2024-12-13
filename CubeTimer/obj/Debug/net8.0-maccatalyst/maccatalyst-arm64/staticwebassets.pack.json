@@ -1,0 +1,49 @@
+{
+  "Files": [
+    {
+      "Id": "/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/scopedcss/bundle/CubeTimer.styles.css",
+      "PackagePath": "staticwebassets/CubeTimer.styles.css"
+    },
+    {
+      "Id": "/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/wwwroot/css/app.css",
+      "PackagePath": "staticwebassets/css/app.css"
+    },
+    {
+      "Id": "/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/wwwroot/css/bootstrap/bootstrap.min.css",
+      "PackagePath": "staticwebassets/css/bootstrap/bootstrap.min.css"
+    },
+    {
+      "Id": "/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/wwwroot/css/bootstrap/bootstrap.min.css.map",
+      "PackagePath": "staticwebassets/css/bootstrap/bootstrap.min.css.map"
+    },
+    {
+      "Id": "/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/wwwroot/favicon.png",
+      "PackagePath": "staticwebassets/favicon.png"
+    },
+    {
+      "Id": "/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/wwwroot/index.html",
+      "PackagePath": "staticwebassets/index.html"
+    },
+    {
+      "Id": "/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/wwwroot/js/timer.js",
+      "PackagePath": "staticwebassets/js/timer.js"
+    },
+    {
+      "Id": "obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/staticwebassets/msbuild.CubeTimer.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/staticwebassets/msbuild.build.CubeTimer.props",
+      "PackagePath": "build\\CubeTimer.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/staticwebassets/msbuild.buildMultiTargeting.CubeTimer.props",
+      "PackagePath": "buildMultiTargeting\\CubeTimer.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/staticwebassets/msbuild.buildTransitive.CubeTimer.props",
+      "PackagePath": "buildTransitive\\CubeTimer.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

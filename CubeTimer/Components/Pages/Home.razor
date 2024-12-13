@@ -1,0 +1,271 @@
+﻿@page "/"
+@inject IJSRuntime JSRuntime
+
+<!-- Scramble Display -->
+<div class="scramble-display">
+    <p>@CurrentScramble</p>
+</div>
+
+<!-- Timer Display -->
+<div class="timer-display">@ElapsedTime</div>
+
+<div class="averages">
+    <div>Ao5: @Ao5Display</div>
+    <div>Ao12: @Ao12Display</div>
+</div>
+<!-- Recorded Times Panel -->
+
+
+<div class="times-panel">
+    <h2>Recorded Times</h2>
+    @if (recordedTimes.Count == 0)
+    {
+        <p>No times recorded yet.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var record in Enumerable.Reverse(recordedTimes))
+            {
+                <li>
+                    <strong>Scramble:</strong> @record.Scramble <br />
+                    <strong>Time:</strong> @record.Time
+                    <button @onclick="() => DeleteTime(record)">Delete</button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+
+@code {
+    private bool _isRunning = false;
+    private DateTime _startTime;
+    private TimeSpan _elapsed = TimeSpan.Zero;
+    private List<Record> recordedTimes = new();
+    private string Ao5Display = "N/A";
+    private string Ao12Display = "N/A";
+
+    // Scramble that's always displayed
+    private string CurrentScramble = GenerateScramble();
+
+    // Generate a random scramble
+    private static string GenerateScramble()
+    {
+        var moves = new[] { "R", "L", "U", "D", "F", "B" };
+        var modifiers = new[] { "", "'", "2" };
+        var scramble = new List<string>();
+        var previousMove = "";
+
+        for (int i = 0; i < 20; i++)
+        {
+            string move;
+            do
+            {
+                move = moves[Random.Shared.Next(moves.Length)];
+            } while (move == previousMove);
+
+            previousMove = move;
+            scramble.Add(move + modifiers[Random.Shared.Next(modifiers.Length)]);
+        }
+
+        return string.Join(" ", scramble);
+    }
+
+    private string ElapsedTime
+    {
+        get
+        {
+            if (_elapsed.TotalHours >= 1)
+                return _elapsed.ToString(@"hh\:mm\:ss\.fff");
+            else if (_elapsed.TotalMinutes >= 1)
+                return _elapsed.ToString(@"mm\:ss\.fff");
+            else
+                return _elapsed.ToString(@"ss\.fff");
+        }
+    }
+
+    private void StartTimer()
+    {
+        if (!_isRunning)
+        {
+            _elapsed = TimeSpan.Zero;
+            _isRunning = true;
+            _startTime = DateTime.Now;
+            _ = UpdateTimerAsync();
+        }
+    }
+
+    private void StopTimer()
+    {
+        if (_isRunning)
+        {
+            _isRunning = false;
+            RecordTime(CurrentScramble, ElapsedTime);
+            CurrentScramble = GenerateScramble(); // Update scramble only when stopped
+            StateHasChanged(); // Ensure the UI updates immediately
+        }
+    }
+// this is on temperary hold
+    private void ResetTimer()
+    {
+        _isRunning = false;
+        _elapsed = TimeSpan.Zero;
+        StateHasChanged(); // Reset the UI immediately
+    }
+
+    private async Task UpdateTimerAsync()
+    {
+        while (_isRunning)
+        {
+            _elapsed = DateTime.Now - _startTime;
+            StateHasChanged(); // Refresh the UI
+            await Task.Delay(50); // Update every 50ms
+        }
+    }
+
+    private async void RecordTime(string scramble, string time)
+    {
+        // Add record to the list
+        recordedTimes.Add(new Record { Scramble = scramble, Time = time });
+
+        // Save to local storage immediately
+        await SaveToLocalStorage();
+        UpdateAverages(); // Update Ao5 and Ao12
+        StateHasChanged(); // Update the UI immediately after saving
+    }
+
+    private async Task SaveToLocalStorage()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes);
+        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "recordedTimes", json);
+    }
+
+    private async Task LoadFromLocalStorage()
+    {
+        var json = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "recordedTimes");
+        if (!string.IsNullOrEmpty(json))
+        {
+            recordedTimes = System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+            StateHasChanged(); // Ensure the UI reflects loaded data
+        }
+    }
+
+    private async void DeleteTime(Record record)
+    {
+        recordedTimes.Remove(record);
+        await SaveToLocalStorage(); // Update local storage after deletion
+        StateHasChanged(); // Ensure the UI updates immediately after deletion
+        UpdateAverages(); // to dynamicaly update the averages
+    }
+
+    public class Record
+    {
+        public string Scramble { get; set; }
+        public string Time { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load previously saved times from local storage
+        await LoadFromLocalStorage();
+
+        // Initialize the spacebar listener
+        await JSRuntime.InvokeVoidAsync("initializeKeyListener", DotNetObjectReference.Create(this));
+    }
+
+    [JSInvokable]
+    public void OnSpacePressed()
+    {
+        if (_isRunning)
+        {
+            StopTimer();
+        }
+        else
+        {
+            StartTimer();
+        }
+    }
+
+    private void UpdateAverages()
+    {
+        if (recordedTimes.Count >= 5)
+        {
+            // Extract the last 5 times
+            var lastFiveTimes = recordedTimes.Skip(Math.Max(0, recordedTimes.Count - 5)).ToList();
+
+            // Calculate Ao5 and assign it to Ao5Display
+            Ao5Display = CalculateWCAAverageAO5(lastFiveTimes);
+
+            // Refresh UI
+            StateHasChanged();
+        }
+        else
+        {
+            Ao5Display = "N/A";
+        }
+
+        if (recordedTimes.Count >= 12)
+        {
+            var lastTwelveTimes = recordedTimes.Skip(Math.Max(0, recordedTimes.Count - 12)).ToList();
+
+            // Calculate Ao5 and assign it to Ao5Display
+            Ao12Display = CalculateWCAAverageAO12(lastTwelveTimes);
+
+            // Refresh UI
+            StateHasChanged();
+        }
+        else
+        {
+            Ao12Display = "N/A";
+        }
+    }
+
+    private string CalculateWCAAverageAO5(List<Record> times)
+    {
+        if (times.Count != 5)
+            throw new ArgumentException("Exactly 5 times are required to calculate an Ao5.");
+
+        // Convert the string times to double
+        var timeValues = times.Select(t => double.Parse(t.Time)).ToList();
+
+        // Sort the times in ascending order
+        timeValues.Sort();
+
+        // Remove the smallest and largest times
+        timeValues.RemoveAt(0); // Remove smallest
+        timeValues.RemoveAt(timeValues.Count - 1); // Remove largest
+
+        // Calculate the average of the remaining 3 times
+        double average = timeValues.Average();
+
+        // Return the result formatted as a string
+        return average.ToString("F3"); // Format to 2 decimal places
+    }
+
+    private string CalculateWCAAverageAO12(List<Record> times)
+    {
+        if (times.Count != 12)
+            throw new ArgumentException("Exactly 12 times are required to calculate an Ao12.");
+
+        // Convert the string times to double
+        var timeValues = times.Select(t => double.Parse(t.Time)).ToList();
+
+        // Sort the times in ascending order
+        timeValues.Sort();
+
+        // Remove the smallest and largest times
+        timeValues.RemoveAt(0); // Remove smallest
+        timeValues.RemoveAt(timeValues.Count - 1); // Remove largest
+
+        // Calculate the average of the remaining 3 times
+        double average = timeValues.Average();
+
+        // Return the result formatted as a string
+        return average.ToString("F3"); // Format to 2 decimal places
+    }
+
+
+    
+}
+

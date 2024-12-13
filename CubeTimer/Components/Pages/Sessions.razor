@@ -1,0 +1,61 @@
+﻿@page "/times"
+@inject IJSRuntime JSRuntime
+
+<h1>Recorded Times</h1>
+
+<div class="times-panel">
+    @if (recordedTimes.Count == 0)
+    {
+        <p>No times recorded yet.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var record in Enumerable.Reverse(recordedTimes))
+            {
+                <li>
+                    <strong>Scramble:</strong> @record.Scramble <br />
+                    <strong>Time:</strong> @record.Time
+                    <button @onclick="() => DeleteTime(record)">Delete</button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private List<Record> recordedTimes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFromLocalStorage();
+    }
+
+    private async Task LoadFromLocalStorage()
+    {
+        var json = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "recordedTimes");
+        if (!string.IsNullOrEmpty(json))
+        {
+            recordedTimes = System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+        }
+    }
+
+    private async void DeleteTime(Record record)
+    {
+        recordedTimes.Remove(record);
+        await SaveToLocalStorage();
+        StateHasChanged();
+    }
+
+    private async Task SaveToLocalStorage()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes);
+        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "recordedTimes", json);
+    }
+
+    public class Record
+    {
+        public string Scramble { get; set; }
+        public string Time { get; set; }
+    }
+}
