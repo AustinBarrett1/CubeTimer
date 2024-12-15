@@ -321,6 +321,7 @@
 /Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/CubeTimer.AssemblyInfo.cs
 /Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/CubeTimer.csproj.CoreCompileInputs.cache
 /Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/CubeTimer.MvcApplicationPartsAssemblyInfo.cache
+/Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/CubeTimer.sourcelink.json
 /Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/XamlC.stamp
 /Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/CubeTimer.csproj.Up2Date
 /Users/austinbarrett/Documents/TimerProject/CubeTimer/CubeTimer/obj/Debug/net8.0-maccatalyst/maccatalyst-arm64/CubeTimer.dll

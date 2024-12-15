@@ -1,61 +1,102 @@
 ﻿@page "/times"
 @inject IJSRuntime JSRuntime
 
-<h1>Recorded Times</h1>
+<h1>Sessions</h1>
 
-<div class="times-panel">
-    @if (recordedTimes.Count == 0)
-    {
-        <p>No times recorded yet.</p>
-    }
-    else
-    {
-        <ul>
-            @foreach (var record in Enumerable.Reverse(recordedTimes))
-            {
-                <li>
-                    <strong>Scramble:</strong> @record.Scramble <br />
-                    <strong>Time:</strong> @record.Time
-                    <button @onclick="() => DeleteTime(record)">Delete</button>
-                </li>
-            }
-        </ul>
-    }
+<!-- Create New Session -->
+<div>
+    <input @bind="newSessionName" placeholder="New Session Name" />
+    <button @onclick="CreateNewSession">Create</button>
 </div>
+
+<!-- Select Session -->
+<div>
+    <label>Select Session:</label>
+    <select value="@selectedSession" @onchange="e => OnSessionChanged(e.Value?.ToString())">
+        @foreach (var session in sessions)
+        {
+            <option value="@session">@session</option>
+        }
+    </select>
+</div>
+
+<h2>Recorded Times</h2>
+@if (recordedTimes.Count == 0)
+{
+    <p>No times recorded for this session.</p>
+}
+else
+{
+    <ul>
+        @foreach (var record in recordedTimes)
+        {
+            <li>
+                <strong>Scramble:</strong> @record.Scramble <br />
+                <strong>Time:</strong> @record.Time
+            </li>
+        }
+    </ul>
+}
 
 @code {
     private List<Record> recordedTimes = new();
+    private List<string> sessions = new();
+    private string selectedSession = "Default";
+    private string newSessionName = "";
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadFromLocalStorage();
+        LoadSessions();
+        selectedSession = sessions.First();
+        LoadSessionData();
     }
 
-    private async Task LoadFromLocalStorage()
+    private void CreateNewSession()
     {
-        var json = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "recordedTimes");
-        if (!string.IsNullOrEmpty(json))
+        if (!string.IsNullOrWhiteSpace(newSessionName) && !sessions.Contains(newSessionName))
         {
-            recordedTimes = System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+            sessions.Add(newSessionName);
+            SaveSessions();
+            selectedSession = newSessionName;
+            recordedTimes.Clear();
+            SaveSessionData();
         }
     }
 
-    private async void DeleteTime(Record record)
+    private void LoadSessions()
     {
-        recordedTimes.Remove(record);
-        await SaveToLocalStorage();
-        StateHasChanged();
+        var json = Preferences.Get("sessions", string.Empty);
+        sessions = string.IsNullOrEmpty(json) ? new List<string> { "Default" } : 
+            System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
     }
 
-    private async Task SaveToLocalStorage()
+    private void SaveSessions()
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes);
-        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "recordedTimes", json);
+        Preferences.Set("sessions", System.Text.Json.JsonSerializer.Serialize(sessions));
+    }
+
+    private void LoadSessionData()
+    {
+        var json = Preferences.Get(selectedSession, string.Empty);
+        recordedTimes = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+    }
+
+    private void SaveSessionData()
+    {
+        Preferences.Set(selectedSession, System.Text.Json.JsonSerializer.Serialize(recordedTimes));
+    }
+
+    private void OnSessionChanged(string? newValue)
+    {
+        selectedSession = newValue ?? "Default";
+        LoadSessionData();
     }
 
     public class Record
     {
-        public string Scramble { get; set; }
-        public string Time { get; set; }
+        public string Scramble { get; set; } = string.Empty;
+        public string Time { get; set; } = string.Empty;
     }
 }

@@ -26,6 +26,12 @@
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        window.blurElement = function () {
+            document.activeElement?.blur();
+        };
+    </script>
+
 
 </body>
 

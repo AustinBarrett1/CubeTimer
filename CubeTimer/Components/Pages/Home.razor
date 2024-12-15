@@ -1,6 +1,17 @@
 ﻿@page "/"
 @inject IJSRuntime JSRuntime
 
+<!-- Session Selection -->
+<div>
+    <label for="sessionSelect">Select Session:</label>
+    <select value="@selectedSession" @onchange="e => OnSessionChanged(e.Value?.ToString())">
+        @foreach (var session in sessions)
+        {
+            <option value="@session">@session</option>
+        }
+    </select>
+</div>
+
 <!-- Scramble Display -->
 <div class="scramble-display">
     <p>@CurrentScramble</p>
@@ -13,14 +24,13 @@
     <div>Ao5: @Ao5Display</div>
     <div>Ao12: @Ao12Display</div>
 </div>
+
 <!-- Recorded Times Panel -->
-
-
 <div class="times-panel">
     <h2>Recorded Times</h2>
     @if (recordedTimes.Count == 0)
     {
-        <p>No times recorded yet.</p>
+        <p>No times recorded yet for this session.</p>
     }
     else
     {
@@ -37,19 +47,38 @@
     }
 </div>
 
-
 @code {
     private bool _isRunning = false;
     private DateTime _startTime;
     private TimeSpan _elapsed = TimeSpan.Zero;
     private List<Record> recordedTimes = new();
+    private List<string> sessions = new();
+    private string selectedSession = "Default";
     private string Ao5Display = "N/A";
     private string Ao12Display = "N/A";
-
-    // Scramble that's always displayed
     private string CurrentScramble = GenerateScramble();
 
-    // Generate a random scramble adding more to this comment
+    private string ElapsedTime
+    {
+        get
+        {
+            if (_elapsed.TotalHours >= 1)
+                return _elapsed.ToString(@"hh\:mm\:ss\.fff");
+            else if (_elapsed.TotalMinutes >= 1)
+                return _elapsed.ToString(@"mm\:ss\.fff");
+            else
+                return _elapsed.ToString(@"ss\.fff");
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadSessions();
+        selectedSession = sessions.FirstOrDefault() ?? "Default";
+        LoadSessionData();
+        await JSRuntime.InvokeVoidAsync("initializeKeyListener", DotNetObjectReference.Create(this));
+    }
+
     private static string GenerateScramble()
     {
         var moves = new[] { "R", "L", "U", "D", "F", "B" };
@@ -72,19 +101,6 @@
         return string.Join(" ", scramble);
     }
 
-    private string ElapsedTime
-    {
-        get
-        {
-            if (_elapsed.TotalHours >= 1)
-                return _elapsed.ToString(@"hh\:mm\:ss\.fff");
-            else if (_elapsed.TotalMinutes >= 1)
-                return _elapsed.ToString(@"mm\:ss\.fff");
-            else
-                return _elapsed.ToString(@"ss\.fff");
-        }
-    }
-
     private void StartTimer()
     {
         if (!_isRunning)
@@ -102,16 +118,9 @@
         {
             _isRunning = false;
             RecordTime(CurrentScramble, ElapsedTime);
-            CurrentScramble = GenerateScramble(); // Update scramble only when stopped
-            StateHasChanged(); // Ensure the UI updates immediately
+            CurrentScramble = GenerateScramble();
         }
-    }
-// this is on temperary hold
-    private void ResetTimer()
-    {
-        _isRunning = false;
-        _elapsed = TimeSpan.Zero;
-        StateHasChanged(); // Reset the UI immediately
+        StateHasChanged();
     }
 
     private async Task UpdateTimerAsync()
@@ -119,86 +128,31 @@
         while (_isRunning)
         {
             _elapsed = DateTime.Now - _startTime;
-            StateHasChanged(); // Refresh the UI
-            await Task.Delay(50); // Update every 50ms
+            StateHasChanged();
+            await Task.Delay(50);
         }
     }
 
-    private async void RecordTime(string scramble, string time)
+    private void RecordTime(string scramble, string time)
     {
-        // Add record to the list
         recordedTimes.Add(new Record { Scramble = scramble, Time = time });
-
-        // Save to local storage immediately
-        await SaveToLocalStorage();
-        UpdateAverages(); // Update Ao5 and Ao12
-        StateHasChanged(); // Update the UI immediately after saving
+        SaveSessionData();
+        UpdateAverages();
     }
 
-    private async Task SaveToLocalStorage()
-    {
-        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes);
-        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "recordedTimes", json);
-    }
-
-    private async Task LoadFromLocalStorage()
-    {
-        var json = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "recordedTimes");
-        if (!string.IsNullOrEmpty(json))
-        {
-            recordedTimes = System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
-            StateHasChanged(); // Ensure the UI reflects loaded data
-        }
-    }
-
-    private async void DeleteTime(Record record)
+    private void DeleteTime(Record record)
     {
         recordedTimes.Remove(record);
-        await SaveToLocalStorage(); // Update local storage after deletion
-        StateHasChanged(); // Ensure the UI updates immediately after deletion
-        UpdateAverages(); // to dynamicaly update the averages
-    }
-
-    public class Record
-    {
-        public string Scramble { get; set; }
-        public string Time { get; set; }
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
-        // Load previously saved times from local storage
-        await LoadFromLocalStorage();
-
-        // Initialize the spacebar listener
-        await JSRuntime.InvokeVoidAsync("initializeKeyListener", DotNetObjectReference.Create(this));
-    }
-
-    [JSInvokable]
-    public void OnSpacePressed()
-    {
-        if (_isRunning)
-        {
-            StopTimer();
-        }
-        else
-        {
-            StartTimer();
-        }
+        SaveSessionData();
+        UpdateAverages();
     }
 
     private void UpdateAverages()
     {
         if (recordedTimes.Count >= 5)
         {
-            // Extract the last 5 times
-            var lastFiveTimes = recordedTimes.Skip(Math.Max(0, recordedTimes.Count - 5)).ToList();
-
-            // Calculate Ao5 and assign it to Ao5Display
-            Ao5Display = CalculateWCAAverageAO5(lastFiveTimes);
-
-            // Refresh UI
-            StateHasChanged();
+            var lastFive = recordedTimes.Skip(Math.Max(0, recordedTimes.Count - 5)).ToList();
+            Ao5Display = CalculateWCAAverageAO5(lastFive);
         }
         else
         {
@@ -207,13 +161,8 @@
 
         if (recordedTimes.Count >= 12)
         {
-            var lastTwelveTimes = recordedTimes.Skip(Math.Max(0, recordedTimes.Count - 12)).ToList();
-
-            // Calculate Ao5 and assign it to Ao5Display
-            Ao12Display = CalculateWCAAverageAO12(lastTwelveTimes);
-
-            // Refresh UI
-            StateHasChanged();
+            var lastTwelve = recordedTimes.Skip(Math.Max(0, recordedTimes.Count - 12)).ToList();
+            Ao12Display = CalculateWCAAverageAO12(lastTwelve);
         }
         else
         {
@@ -223,49 +172,65 @@
 
     private string CalculateWCAAverageAO5(List<Record> times)
     {
-        if (times.Count != 5)
-            throw new ArgumentException("Exactly 5 times are required to calculate an Ao5.");
-
-        // Convert the string times to double
-        var timeValues = times.Select(t => double.Parse(t.Time)).ToList();
-
-        // Sort the times in ascending order
-        timeValues.Sort();
-
-        // Remove the smallest and largest times
-        timeValues.RemoveAt(0); // Remove smallest
-        timeValues.RemoveAt(timeValues.Count - 1); // Remove largest
-
-        // Calculate the average of the remaining 3 times
-        double average = timeValues.Average();
-
-        // Return the result formatted as a string
-        return average.ToString("F3"); // Format to 2 decimal places
+        var timeValues = times.Select(t => double.Parse(t.Time)).OrderBy(t => t).ToList();
+        timeValues.RemoveAt(0); // Remove fastest
+        timeValues.RemoveAt(timeValues.Count - 1); // Remove slowest
+        return timeValues.Average().ToString("F3");
     }
 
     private string CalculateWCAAverageAO12(List<Record> times)
     {
-        if (times.Count != 12)
-            throw new ArgumentException("Exactly 12 times are required to calculate an Ao12.");
-
-        // Convert the string times to double
-        var timeValues = times.Select(t => double.Parse(t.Time)).ToList();
-
-        // Sort the times in ascending order
-        timeValues.Sort();
-
-        // Remove the smallest and largest times
-        timeValues.RemoveAt(0); // Remove smallest
-        timeValues.RemoveAt(timeValues.Count - 1); // Remove largest
-
-        // Calculate the average of the remaining 3 times
-        double average = timeValues.Average();
-
-        // Return the result formatted as a string
-        return average.ToString("F3"); // Format to 2 decimal places
+        var timeValues = times.Select(t => double.Parse(t.Time)).OrderBy(t => t).ToList();
+        timeValues.RemoveAt(0); // Remove fastest
+        timeValues.RemoveAt(timeValues.Count - 1); // Remove slowest
+        return timeValues.Average().ToString("F3");
     }
 
+    private void LoadSessions()
+    {
+        var json = Preferences.Get("sessions", string.Empty);
+        sessions = string.IsNullOrEmpty(json) ? new List<string> { "Default" } :
+                   System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string> { "Default" };
+    }
 
-    
+    private void SaveSessions()
+    {
+        Preferences.Set("sessions", System.Text.Json.JsonSerializer.Serialize(sessions));
+    }
+
+    private void LoadSessionData()
+    {
+        var json = Preferences.Get(selectedSession, string.Empty);
+        recordedTimes = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+        UpdateAverages();
+    }
+
+    private void SaveSessionData()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes);
+        Preferences.Set(selectedSession, json);
+    }
+
+    private async void OnSessionChanged(string? newValue)
+    {
+        selectedSession = newValue ?? "Default";
+        LoadSessionData();
+        await JSRuntime.InvokeVoidAsync("blurElement"); // Remove focus from the dropdown
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnSpacePressed()
+    {
+        if (_isRunning) StopTimer();
+        else StartTimer();
+    }
+
+    public class Record
+    {
+        public string Scramble { get; set; } = string.Empty;
+        public string Time { get; set; } = string.Empty;
+    }
 }
-
