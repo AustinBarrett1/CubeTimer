@@ -3,10 +3,14 @@
 
 <h1>Sessions</h1>
 
-<!-- Create New Session -->
+<!-- Create and Delete Buttons -->
 <div>
     <input @bind="newSessionName" placeholder="New Session Name" />
     <button @onclick="CreateNewSession">Create</button>
+    @if (selectedSession != "Default")
+    {
+        <button class="delete-button" @onclick="ConfirmDeleteCurrentSession">Delete Current Session</button>
+    }
 </div>
 
 <!-- Select Session -->
@@ -25,7 +29,7 @@
     <h2>Recorded Times</h2>
     @if (recordedTimes.Count == 0)
     {
-        <p>No times recorded yet for this session.</p>
+        <p>No times recorded for this session.</p>
     }
     else
     {
@@ -95,11 +99,38 @@
         }
     }
 
+    private async void ConfirmDeleteCurrentSession()
+    {
+        // Ask for confirmation
+        var isConfirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to delete the session '{selectedSession}'? All associated times will be permanently deleted.");
+        
+        if (isConfirmed)
+        {
+            DeleteCurrentSession();
+            StateHasChanged(); // Update the page immediately after deletion
+        }
+    }
+
+    private void DeleteCurrentSession()
+    {
+        if (selectedSession != "Default" && sessions.Contains(selectedSession))
+        {
+            sessions.Remove(selectedSession);
+            Preferences.Remove(selectedSession); // Remove the session's recorded times
+            SaveSessions();
+
+            // Switch to "Default" session after deletion
+            selectedSession = "Default";
+            LoadSessionData();
+        }
+    }
+
     private void DeleteTime(Record record)
     {
         recordedTimes.Remove(record);
         SaveSessionData();
-        StateHasChanged();
+        StateHasChanged(); // Refresh the UI after deleting a time
     }
 
     private void SaveSessionData()

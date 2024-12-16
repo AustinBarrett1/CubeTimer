@@ -229,4 +229,17 @@ button:active {
 .times-panel li button:hover {
     background-color: #e60000;
 }
- 
+.delete-button {
+    background-color: red;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    margin-left: 10px;
+    border-radius: 5px;
+}
+
+.delete-button:hover {
+    background-color: darkred;
+}
+
