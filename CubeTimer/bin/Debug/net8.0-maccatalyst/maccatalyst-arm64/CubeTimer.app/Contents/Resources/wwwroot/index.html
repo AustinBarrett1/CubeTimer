@@ -27,6 +27,7 @@
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
     <script>
+        // this insures that the element looses focus once an element is selected
         window.blurElement = function () {
             document.activeElement?.blur();
         };

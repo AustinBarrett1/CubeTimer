@@ -20,23 +20,27 @@
     </select>
 </div>
 
-<h2>Recorded Times</h2>
-@if (recordedTimes.Count == 0)
-{
-    <p>No times recorded for this session.</p>
-}
-else
-{
-    <ul>
-        @foreach (var record in recordedTimes)
-        {
-            <li>
-                <strong>Scramble:</strong> @record.Scramble <br />
-                <strong>Time:</strong> @record.Time
-            </li>
-        }
-    </ul>
-}
+<!-- Recorded Times Panel -->
+<div class="times-panel">
+    <h2>Recorded Times</h2>
+    @if (recordedTimes.Count == 0)
+    {
+        <p>No times recorded yet for this session.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var record in Enumerable.Reverse(recordedTimes))
+            {
+                <li>
+                    <strong>Scramble:</strong> @record.Scramble <br />
+                    <strong>Time:</strong> @record.Time
+                    <button @onclick="() => DeleteTime(record)">Delete</button>
+                </li>
+            }
+        </ul>
+    }
+</div>
 
 @code {
     private List<Record> recordedTimes = new();
@@ -47,27 +51,23 @@ else
     protected override void OnInitialized()
     {
         LoadSessions();
-        selectedSession = sessions.First();
+        selectedSession = sessions.FirstOrDefault() ?? "Default";
         LoadSessionData();
     }
 
-    private void CreateNewSession()
+    private async void OnSessionChanged(string? newValue)
     {
-        if (!string.IsNullOrWhiteSpace(newSessionName) && !sessions.Contains(newSessionName))
-        {
-            sessions.Add(newSessionName);
-            SaveSessions();
-            selectedSession = newSessionName;
-            recordedTimes.Clear();
-            SaveSessionData();
-        }
+        selectedSession = newValue ?? "Default";
+        LoadSessionData();
+        await JSRuntime.InvokeVoidAsync("blurElement"); // Remove focus from the dropdown
+        StateHasChanged();
     }
 
     private void LoadSessions()
     {
         var json = Preferences.Get("sessions", string.Empty);
-        sessions = string.IsNullOrEmpty(json) ? new List<string> { "Default" } : 
-            System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        sessions = string.IsNullOrEmpty(json) ? new List<string> { "Default" } :
+                   System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string> { "Default" };
     }
 
     private void SaveSessions()
@@ -83,15 +83,28 @@ else
             : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
     }
 
+    private void CreateNewSession()
+    {
+        if (!string.IsNullOrWhiteSpace(newSessionName) && !sessions.Contains(newSessionName))
+        {
+            sessions.Add(newSessionName);
+            SaveSessions();
+            selectedSession = newSessionName;
+            recordedTimes.Clear();
+            SaveSessionData();
+        }
+    }
+
+    private void DeleteTime(Record record)
+    {
+        recordedTimes.Remove(record);
+        SaveSessionData();
+        StateHasChanged();
+    }
+
     private void SaveSessionData()
     {
         Preferences.Set(selectedSession, System.Text.Json.JsonSerializer.Serialize(recordedTimes));
-    }
-
-    private void OnSessionChanged(string? newValue)
-    {
-        selectedSession = newValue ?? "Default";
-        LoadSessionData();
     }
 
     public class Record
