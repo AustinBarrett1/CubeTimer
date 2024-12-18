@@ -242,4 +242,13 @@ button:active {
 .delete-button:hover {
     background-color: darkred;
 }
+.favorited {
+    background-color: gold;
+    color: black;
+}
+
+.not-favorited {
+    background-color: lightgray;
+    color: black;
+}
 

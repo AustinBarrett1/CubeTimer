@@ -5,9 +5,11 @@
 <div>
     <label for="sessionSelect">Select Session:</label>
     <select value="@selectedSession" @onchange="e => OnSessionChanged(e.Value?.ToString())">
-        @foreach (var session in sessions)
-        {
-            <option value="@session">@session</option>
+        @{
+            foreach (var session in sessions.Where(s => s != "Favorites")) 
+            {
+                <option value="@session">@session</option>
+            }
         }
     </select>
 </div>
@@ -39,8 +41,12 @@
             {
                 <li>
                     <strong>Scramble:</strong> @record.Scramble <br />
-                    <strong>Time:</strong> @record.Time
+                    <strong>Time:</strong> @record.Time 
+                    @(record.IsFavorited ? "⭐️" : "") <!-- Show star if favorited -->
                     <button @onclick="() => DeleteTime(record)">Delete</button>
+                    <button class="@GetFavoriteButtonClass(record)" @onclick="() => ToggleFavorite(record)">
+                        @GetFavoriteButtonText(record)
+                    </button>
                 </li>
             }
         </ul>
@@ -74,8 +80,16 @@
     protected override async Task OnInitializedAsync()
     {
         LoadSessions();
+
+        if (!sessions.Contains("Favorites"))
+        {
+            sessions.Add("Favorites");
+            SaveSessions();
+        }
+
         selectedSession = sessions.FirstOrDefault() ?? "Default";
         LoadSessionData();
+        LoadFavoritesStatus(); // Load favorite status when initializing
         await JSRuntime.InvokeVoidAsync("initializeKeyListener", DotNetObjectReference.Create(this));
     }
 
@@ -147,6 +161,73 @@
         UpdateAverages();
     }
 
+    private void ToggleFavorite(Record record)
+    {
+        if (!record.IsFavorited)
+        {
+            AddToFavorites(record);
+            record.IsFavorited = true;
+        }
+        else
+        {
+            RemoveFromFavorites(record);
+            record.IsFavorited = false;
+        }
+
+        SaveFavoritesStatus(); // Save the favorite status
+        StateHasChanged(); // Refresh UI
+    }
+
+    private void AddToFavorites(Record record)
+    {
+        var json = Preferences.Get("Favorites", string.Empty);
+        var favorites = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+
+        favorites.Add(new Record { Scramble = record.Scramble, Time = record.Time, IsFavorited = true });
+
+        Preferences.Set("Favorites", System.Text.Json.JsonSerializer.Serialize(favorites));
+    }
+
+    private void RemoveFromFavorites(Record record)
+    {
+        var json = Preferences.Get("Favorites", string.Empty);
+        var favorites = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+
+        var recordToRemove = favorites.FirstOrDefault(f => f.Scramble == record.Scramble && f.Time == record.Time);
+        if (recordToRemove != null)
+        {
+            favorites.Remove(recordToRemove);
+        }
+
+        Preferences.Set("Favorites", System.Text.Json.JsonSerializer.Serialize(favorites));
+    }
+
+    private void LoadFavoritesStatus()
+    {
+        var json = Preferences.Get("Favorites", string.Empty);
+        var favorites = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+
+        foreach (var record in recordedTimes)
+        {
+            if (favorites.Any(f => f.Scramble == record.Scramble && f.Time == record.Time))
+            {
+                record.IsFavorited = true;
+            }
+        }
+    }
+
+    private void SaveFavoritesStatus()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes.Where(r => r.IsFavorited));
+        Preferences.Set("Favorites", json);
+    }
+
     private void UpdateAverages()
     {
         if (recordedTimes.Count >= 5)
@@ -186,6 +267,10 @@
         return timeValues.Average().ToString("F3");
     }
 
+    private string GetFavoriteButtonClass(Record record) => record.IsFavorited ? "favorited" : "not-favorited";
+
+    private string GetFavoriteButtonText(Record record) => record.IsFavorited ? "Unfavorite" : "Favorite";
+
     private void LoadSessions()
     {
         var json = Preferences.Get("sessions", string.Empty);
@@ -217,6 +302,7 @@
     {
         selectedSession = newValue ?? "Default";
         LoadSessionData();
+        LoadFavoritesStatus(); // Reload favorite status on session change
         await JSRuntime.InvokeVoidAsync("blurElement"); // Remove focus from the dropdown
         StateHasChanged();
     }
@@ -232,5 +318,6 @@
     {
         public string Scramble { get; set; } = string.Empty;
         public string Time { get; set; } = string.Empty;
+        public bool IsFavorited { get; set; } = false; // Property to track favorite status
     }
 }

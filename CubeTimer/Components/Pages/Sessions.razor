@@ -7,7 +7,7 @@
 <div>
     <input @bind="newSessionName" placeholder="New Session Name" />
     <button @onclick="CreateNewSession">Create</button>
-    @if (selectedSession != "Default")
+    @if (selectedSession != "Default" && selectedSession != "Favorites")
     {
         <button class="delete-button" @onclick="ConfirmDeleteCurrentSession">Delete Current Session</button>
     }
@@ -38,8 +38,12 @@
             {
                 <li>
                     <strong>Scramble:</strong> @record.Scramble <br />
-                    <strong>Time:</strong> @record.Time
+                    <strong>Time:</strong> @record.Time 
+                    @(record.IsFavorited ? "⭐️" : "") <!-- Show star if favorited -->
                     <button @onclick="() => DeleteTime(record)">Delete</button>
+                    <button class="@GetFavoriteButtonClass(record)" @onclick="() => ToggleFavorite(record)">
+                        @GetFavoriteButtonText(record)
+                    </button>
                 </li>
             }
         </ul>
@@ -55,16 +59,129 @@
     protected override void OnInitialized()
     {
         LoadSessions();
+
+        if (!sessions.Contains("Favorites"))
+        {
+            sessions.Add("Favorites");
+            SaveSessions();
+        }
+
         selectedSession = sessions.FirstOrDefault() ?? "Default";
         LoadSessionData();
+        LoadFavoritesStatus(); // Load favorite status when initializing
     }
 
-    private async void OnSessionChanged(string? newValue)
+    private void OnSessionChanged(string? newValue)
     {
         selectedSession = newValue ?? "Default";
         LoadSessionData();
-        await JSRuntime.InvokeVoidAsync("blurElement"); // Remove focus from the dropdown
-        StateHasChanged();
+        LoadFavoritesStatus(); // Reload favorite status on session change
+    }
+
+    private void CreateNewSession()
+    {
+        if (!string.IsNullOrWhiteSpace(newSessionName) && !sessions.Contains(newSessionName))
+        {
+            sessions.Add(newSessionName);
+            SaveSessions();
+            selectedSession = newSessionName;
+            recordedTimes.Clear();
+            SaveSessionData();
+        }
+    }
+
+    private void ConfirmDeleteCurrentSession()
+    {
+        if (selectedSession == "Favorites")
+        {
+            JSRuntime.InvokeVoidAsync("alert", "The 'Favorites' session cannot be deleted.");
+            return;
+        }
+
+        if (selectedSession != "Default" && sessions.Contains(selectedSession))
+        {
+            sessions.Remove(selectedSession);
+            Preferences.Remove(selectedSession); // Remove the session's recorded times
+            SaveSessions();
+
+            // Switch to "Default" session after deletion
+            selectedSession = "Default";
+            LoadSessionData();
+        }
+    }
+
+    private void DeleteTime(Record record)
+    {
+        recordedTimes.Remove(record);
+        SaveSessionData();
+    }
+
+    private void ToggleFavorite(Record record)
+    {
+        if (!record.IsFavorited)
+        {
+            AddToFavorites(record);
+            record.IsFavorited = true;
+        }
+        else
+        {
+            RemoveFromFavorites(record);
+            record.IsFavorited = false;
+        }
+
+        SaveFavoritesStatus(); // Save the favorite status
+        SaveSessionData(); // Ensure session data is saved
+        StateHasChanged(); // Refresh UI
+    }
+
+    private void AddToFavorites(Record record)
+    {
+        var json = Preferences.Get("Favorites", string.Empty);
+        var favorites = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+
+        favorites.Add(new Record { Scramble = record.Scramble, Time = record.Time, IsFavorited = true });
+
+        Preferences.Set("Favorites", System.Text.Json.JsonSerializer.Serialize(favorites));
+    }
+
+    private void RemoveFromFavorites(Record record)
+    {
+        var json = Preferences.Get("Favorites", string.Empty);
+        var favorites = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+
+        var recordToRemove = favorites.FirstOrDefault(f => f.Scramble == record.Scramble && f.Time == record.Time);
+        if (recordToRemove != null)
+        {
+            favorites.Remove(recordToRemove);
+        }
+
+        Preferences.Set("Favorites", System.Text.Json.JsonSerializer.Serialize(favorites));
+    }
+
+    private void LoadFavoritesStatus()
+    {
+        var json = Preferences.Get("Favorites", string.Empty);
+        var favorites = string.IsNullOrEmpty(json)
+            ? new List<Record>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
+
+        foreach (var record in recordedTimes)
+        {
+            if (favorites.Any(f => f.Scramble == record.Scramble && f.Time == record.Time))
+            {
+                record.IsFavorited = true;
+            }
+        }
+    }
+
+    private void SaveFavoritesStatus()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes.Where(r => r.IsFavorited));
+        Preferences.Set("Favorites", json);
     }
 
     private void LoadSessions()
@@ -87,60 +204,20 @@
             : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
     }
 
-    private void CreateNewSession()
-    {
-        if (!string.IsNullOrWhiteSpace(newSessionName) && !sessions.Contains(newSessionName))
-        {
-            sessions.Add(newSessionName);
-            SaveSessions();
-            selectedSession = newSessionName;
-            recordedTimes.Clear();
-            SaveSessionData();
-        }
-    }
-
-    private async void ConfirmDeleteCurrentSession()
-    {
-        // Ask for confirmation
-        var isConfirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
-            $"Are you sure you want to delete the session '{selectedSession}'? All associated times will be permanently deleted.");
-        
-        if (isConfirmed)
-        {
-            DeleteCurrentSession();
-            StateHasChanged(); // Update the page immediately after deletion
-        }
-    }
-
-    private void DeleteCurrentSession()
-    {
-        if (selectedSession != "Default" && sessions.Contains(selectedSession))
-        {
-            sessions.Remove(selectedSession);
-            Preferences.Remove(selectedSession); // Remove the session's recorded times
-            SaveSessions();
-
-            // Switch to "Default" session after deletion
-            selectedSession = "Default";
-            LoadSessionData();
-        }
-    }
-
-    private void DeleteTime(Record record)
-    {
-        recordedTimes.Remove(record);
-        SaveSessionData();
-        StateHasChanged(); // Refresh the UI after deleting a time
-    }
-
     private void SaveSessionData()
     {
-        Preferences.Set(selectedSession, System.Text.Json.JsonSerializer.Serialize(recordedTimes));
+        var json = System.Text.Json.JsonSerializer.Serialize(recordedTimes);
+        Preferences.Set(selectedSession, json);
     }
+
+    private string GetFavoriteButtonClass(Record record) => record.IsFavorited ? "favorited" : "not-favorited";
+
+    private string GetFavoriteButtonText(Record record) => record.IsFavorited ? "Unfavorite" : "Favorite";
 
     public class Record
     {
         public string Scramble { get; set; } = string.Empty;
         public string Time { get; set; } = string.Empty;
+        public bool IsFavorited { get; set; } = false; // Property to track favorite status
     }
 }
