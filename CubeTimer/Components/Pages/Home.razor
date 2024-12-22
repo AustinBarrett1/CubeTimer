@@ -42,11 +42,21 @@
                 <li>
                     <strong>Scramble:</strong> @record.Scramble <br />
                     <strong>Time:</strong> @record.Time 
+                    @if (!string.IsNullOrEmpty(record.Fault))
+                    {
+                        <span> (Fault: @record.Fault)</span>
+                    }
                     @(record.IsFavorited ? "⭐️" : "") <!-- Show star if favorited -->
+                    <br />
                     <button @onclick="() => DeleteTime(record)">Delete</button>
                     <button class="@GetFavoriteButtonClass(record)" @onclick="() => ToggleFavorite(record)">
                         @GetFavoriteButtonText(record)
                     </button>
+                    <!-- Fault Buttons -->
+                    <button @onclick="() => ApplyPlus2(record)">+2</button>
+                    <button @onclick="() => ApplyPlus4(record)">+4</button>
+                    <button @onclick="() => ApplyDNF(record)">DNF</button>
+                    <button @onclick="() => CancelFault(record)">Cancel Fault</button>
                 </li>
             }
         </ul>
@@ -89,7 +99,7 @@
 
         selectedSession = sessions.FirstOrDefault() ?? "Default";
         LoadSessionData();
-        LoadFavoritesStatus(); // Load favorite status when initializing
+        LoadFavoritesStatus();
         await JSRuntime.InvokeVoidAsync("initializeKeyListener", DotNetObjectReference.Create(this));
     }
 
@@ -149,7 +159,7 @@
 
     private void RecordTime(string scramble, string time)
     {
-        recordedTimes.Add(new Record { Scramble = scramble, Time = time });
+        recordedTimes.Add(new Record { Scramble = scramble, Time = time, Fault = string.Empty });
         SaveSessionData();
         UpdateAverages();
     }
@@ -159,6 +169,37 @@
         recordedTimes.Remove(record);
         SaveSessionData();
         UpdateAverages();
+    }
+
+    private void ApplyFault(Record record, string fault)
+    {
+        record.Fault = fault;
+        SaveSessionData();
+        UpdateAverages();
+        StateHasChanged();
+    }
+
+    private void CancelFault(Record record)
+    {
+        record.Fault = string.Empty;
+        SaveSessionData();
+        UpdateAverages();
+        StateHasChanged();
+    }
+
+    private void ApplyPlus2(Record record)
+    {
+        ApplyFault(record, "+2");
+    }
+
+    private void ApplyPlus4(Record record)
+    {
+        ApplyFault(record, "+4");
+    }
+
+    private void ApplyDNF(Record record)
+    {
+        ApplyFault(record, "DNF");
     }
 
     private void ToggleFavorite(Record record)
@@ -253,18 +294,58 @@
 
     private string CalculateWCAAverageAO5(List<Record> times)
     {
-        var timeValues = times.Select(t => double.Parse(t.Time)).OrderBy(t => t).ToList();
-        timeValues.RemoveAt(0); // Remove fastest
-        timeValues.RemoveAt(timeValues.Count - 1); // Remove slowest
-        return timeValues.Average().ToString("F3");
+        var timeValues = times
+            .Select(t =>
+            {
+                if (t.Fault == "DNF") return double.NaN;
+                double baseTime = double.Parse(t.Time);
+                return t.Fault switch
+                {
+                    "+2" => baseTime + 2,
+                    "+4" => baseTime + 4,
+                    _ => baseTime
+                };
+            })
+            .ToList();
+
+        timeValues = timeValues.OrderBy(t => double.IsNaN(t) ? double.MaxValue : t).ToList();
+
+        if (timeValues.Count(t => !double.IsNaN(t)) < 3) return "DNF";
+        if (timeValues.Count(t => double.IsNaN(t)) > 1) return "DNF";
+
+        var validTimes = timeValues.Where(t => !double.IsNaN(t)).ToList();
+        validTimes.RemoveAt(0);
+        validTimes.RemoveAt(validTimes.Count - 1);
+
+        return validTimes.Average().ToString("F3");
     }
 
     private string CalculateWCAAverageAO12(List<Record> times)
     {
-        var timeValues = times.Select(t => double.Parse(t.Time)).OrderBy(t => t).ToList();
-        timeValues.RemoveAt(0); // Remove fastest
-        timeValues.RemoveAt(timeValues.Count - 1); // Remove slowest
-        return timeValues.Average().ToString("F3");
+        var timeValues = times
+            .Select(t =>
+            {
+                if (t.Fault == "DNF") return double.NaN;
+                double baseTime = double.Parse(t.Time);
+                return t.Fault switch
+                {
+                    "+2" => baseTime + 2,
+                    "+4" => baseTime + 4,
+                    _ => baseTime
+                };
+            })
+            .ToList();
+
+        timeValues = timeValues.OrderBy(t => double.IsNaN(t) ? double.MaxValue : t).ToList();
+
+        if (timeValues.Count(t => !double.IsNaN(t)) < 10) return "DNF";
+        if (timeValues.Count(t => double.IsNaN(t)) > 2) return "DNF";
+
+        var validTimes = timeValues.Where(t => !double.IsNaN(t)).ToList();
+        validTimes.RemoveAt(0);
+        validTimes.RemoveAt(validTimes.Count - 1);
+
+        return validTimes.Average().ToString("F3");
     }
 
     private string GetFavoriteButtonClass(Record record) => record.IsFavorited ? "favorited" : "not-favorited";
@@ -302,8 +383,8 @@
     {
         selectedSession = newValue ?? "Default";
         LoadSessionData();
-        LoadFavoritesStatus(); // Reload favorite status on session change
-        await JSRuntime.InvokeVoidAsync("blurElement"); // Remove focus from the dropdown
+        LoadFavoritesStatus();
+        await JSRuntime.InvokeVoidAsync("blurElement");
         StateHasChanged();
     }
 
@@ -318,6 +399,7 @@
     {
         public string Scramble { get; set; } = string.Empty;
         public string Time { get; set; } = string.Empty;
-        public bool IsFavorited { get; set; } = false; // Property to track favorite status
+        public bool IsFavorited { get; set; } = false;
+        public string Fault { get; set; } = string.Empty;
     }
 }
