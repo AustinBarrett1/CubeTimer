@@ -1,15 +1,21 @@
 ﻿@page "/"
 @inject IJSRuntime JSRuntime
 
-<!-- Session Selection -->
+<!-- Session and Puzzle Selection -->
 <div>
     <label for="sessionSelect">Select Session:</label>
     <select value="@selectedSession" @onchange="e => OnSessionChanged(e.Value?.ToString())">
-        @{
-            foreach (var session in sessions.Where(s => s != "Favorites")) 
-            {
-                <option value="@session">@session</option>
-            }
+        @foreach (var session in sessions.Where(s => s != "Favorites")) 
+        {
+            <option value="@session">@session</option>
+        }
+    </select>
+
+    <label for="puzzleSelect">Select Puzzle:</label>
+    <select value="@selectedPuzzle" @onchange="e => OnPuzzleChanged(e.Value?.ToString())">
+        @foreach(var puzzle in puzzleTypes)
+        {
+            <option value="@puzzle">@puzzle</option>
         }
     </select>
 </div>
@@ -41,12 +47,13 @@
             {
                 <li>
                     <strong>Scramble:</strong> @record.Scramble <br />
-                    <strong>Time:</strong> @record.Time 
+                    <strong>Puzzle:</strong> @record.Puzzle <br />
+                    <strong>Time:</strong> @record.Time
                     @if (!string.IsNullOrEmpty(record.Fault))
                     {
                         <span> (Fault: @record.Fault)</span>
                     }
-                    @(record.IsFavorited ? "⭐️" : "") <!-- Show star if favorited -->
+                    @(record.IsFavorited ? " ⭐️" : "") <!-- Show star if favorited -->
                     <br />
                     <button @onclick="() => DeleteTime(record)">Delete</button>
                     <button class="@GetFavoriteButtonClass(record)" @onclick="() => ToggleFavorite(record)">
@@ -70,9 +77,14 @@
     private List<Record> recordedTimes = new();
     private List<string> sessions = new();
     private string selectedSession = "Default";
+
+    // List of available puzzle types (2x2, 3x3, 4x4, 5x5, etc.)
+    private List<string> puzzleTypes = new() { "2x2", "3x3", "4x4", "5x5" };
+    private string selectedPuzzle = "3x3";
+
     private string Ao5Display = "N/A";
     private string Ao12Display = "N/A";
-    private string CurrentScramble = GenerateScramble();
+    private string CurrentScramble = string.Empty;
 
     private string ElapsedTime
     {
@@ -91,6 +103,7 @@
     {
         LoadSessions();
 
+        // Ensure 'Favorites' session always exists
         if (!sessions.Contains("Favorites"))
         {
             sessions.Add("Favorites");
@@ -100,31 +113,79 @@
         selectedSession = sessions.FirstOrDefault() ?? "Default";
         LoadSessionData();
         LoadFavoritesStatus();
+
+        // Generate scramble for the default puzzle
+        CurrentScramble = GenerateScramble(selectedPuzzle);
+
+        // JS interop for space bar detection
         await JSRuntime.InvokeVoidAsync("initializeKeyListener", DotNetObjectReference.Create(this));
     }
 
-    private static string GenerateScramble()
+    // Generate scramble according to puzzle type
+    private static string GenerateScramble(string puzzle)
     {
-        var moves = new[] { "R", "L", "U", "D", "F", "B" };
+        // For demonstration, we'll use simple examples:
+        // You can replace these with actual scramble generators 
+        // that differ in length/moves for each puzzle.
+        var moves3x3 = new[] { "R", "L", "U", "D", "F", "B" };
         var modifiers = new[] { "", "'", "2" };
-        var scramble = new List<string>();
-        var previousMove = "";
 
-        for (int i = 0; i < 20; i++)
+        var moves2x2 = new[] { "R", "U", "F" }; // small set
+        var moves4x4 = new[] { "R", "r", "U", "u", "F", "f", "L", "l" }; // Example
+        var moves5x5 = new[] { "R", "r", "R2", "U", "u", "U2", "F", "f", "F2" }; // Example
+
+        List<string> scramble = new();
+
+        switch (puzzle)
         {
-            string move;
-            do
-            {
-                move = moves[Random.Shared.Next(moves.Length)];
-            } while (move == previousMove);
+            case "2x2":
+                // Generate a short scramble
+                for (int i = 0; i < 9; i++)
+                {
+                    scramble.Add(moves2x2[Random.Shared.Next(moves2x2.Length)] 
+                                 + modifiers[Random.Shared.Next(modifiers.Length)]);
+                }
+                break;
 
-            previousMove = move;
-            scramble.Add(move + modifiers[Random.Shared.Next(modifiers.Length)]);
+            case "4x4":
+                // Generate a 4x4 scramble with wide moves, example length 40
+                for (int i = 0; i < 40; i++)
+                {
+                    var move = moves4x4[Random.Shared.Next(moves4x4.Length)];
+                    // 4x4 often includes wide moves (r, u, l, f, etc.)
+                    scramble.Add(move + (move.Length == 1 ? modifiers[Random.Shared.Next(modifiers.Length)] : ""));
+                }
+                break;
+
+            case "5x5":
+                // Generate a 5x5 scramble, example length 60
+                for (int i = 0; i < 60; i++)
+                {
+                    var move = moves5x5[Random.Shared.Next(moves5x5.Length)];
+                    scramble.Add(move);
+                }
+                break;
+
+            default: // "3x3"
+                var previousMove = "";
+                for (int i = 0; i < 20; i++)
+                {
+                    string move;
+                    do
+                    {
+                        move = moves3x3[Random.Shared.Next(moves3x3.Length)];
+                    } while (move == previousMove);
+
+                    previousMove = move;
+                    scramble.Add(move + modifiers[Random.Shared.Next(modifiers.Length)]);
+                }
+                break;
         }
 
         return string.Join(" ", scramble);
     }
 
+    // Start/Stop Timer
     private void StartTimer()
     {
         if (!_isRunning)
@@ -141,8 +202,10 @@
         if (_isRunning)
         {
             _isRunning = false;
-            RecordTime(CurrentScramble, ElapsedTime);
-            CurrentScramble = GenerateScramble();
+            // Record time, including puzzle type
+            RecordTime(CurrentScramble, ElapsedTime, selectedPuzzle);
+            // Generate new scramble based on the currently selected puzzle
+            CurrentScramble = GenerateScramble(selectedPuzzle);
         }
         StateHasChanged();
     }
@@ -157,9 +220,15 @@
         }
     }
 
-    private void RecordTime(string scramble, string time)
+    private void RecordTime(string scramble, string time, string puzzle)
     {
-        recordedTimes.Add(new Record { Scramble = scramble, Time = time, Fault = string.Empty });
+        recordedTimes.Add(new Record 
+        { 
+            Scramble = scramble, 
+            Time = time, 
+            Puzzle = puzzle,
+            Fault = string.Empty 
+        });
         SaveSessionData();
         UpdateAverages();
     }
@@ -171,6 +240,26 @@
         UpdateAverages();
     }
 
+    // Puzzle changed
+    private void OnPuzzleChanged(string? newPuzzle)
+    {
+        selectedPuzzle = newPuzzle ?? "3x3";
+        // Optionally generate a new scramble immediately
+        CurrentScramble = GenerateScramble(selectedPuzzle);
+    }
+
+    // Session changed
+    private async void OnSessionChanged(string? newValue)
+    {
+        selectedSession = newValue ?? "Default";
+        LoadSessionData();
+        LoadFavoritesStatus();
+        // Remove focus from the dropdown (optional)
+        await JSRuntime.InvokeVoidAsync("blurElement");
+        StateHasChanged();
+    }
+
+    // Fault Management
     private void ApplyFault(Record record, string fault)
     {
         record.Fault = fault;
@@ -187,21 +276,11 @@
         StateHasChanged();
     }
 
-    private void ApplyPlus2(Record record)
-    {
-        ApplyFault(record, "+2");
-    }
+    private void ApplyPlus2(Record record) => ApplyFault(record, "+2");
+    private void ApplyPlus4(Record record) => ApplyFault(record, "+4");
+    private void ApplyDNF(Record record) => ApplyFault(record, "DNF");
 
-    private void ApplyPlus4(Record record)
-    {
-        ApplyFault(record, "+4");
-    }
-
-    private void ApplyDNF(Record record)
-    {
-        ApplyFault(record, "DNF");
-    }
-
+    // Favorites
     private void ToggleFavorite(Record record)
     {
         if (!record.IsFavorited)
@@ -215,8 +294,8 @@
             record.IsFavorited = false;
         }
 
-        SaveFavoritesStatus(); // Save the favorite status
-        StateHasChanged(); // Refresh UI
+        SaveFavoritesStatus();
+        StateHasChanged();
     }
 
     private void AddToFavorites(Record record)
@@ -226,7 +305,13 @@
             ? new List<Record>()
             : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
 
-        favorites.Add(new Record { Scramble = record.Scramble, Time = record.Time, IsFavorited = true });
+        favorites.Add(new Record 
+        { 
+            Scramble = record.Scramble, 
+            Time = record.Time, 
+            Puzzle = record.Puzzle, 
+            IsFavorited = true 
+        });
 
         Preferences.Set("Favorites", System.Text.Json.JsonSerializer.Serialize(favorites));
     }
@@ -238,7 +323,9 @@
             ? new List<Record>()
             : System.Text.Json.JsonSerializer.Deserialize<List<Record>>(json) ?? new List<Record>();
 
-        var recordToRemove = favorites.FirstOrDefault(f => f.Scramble == record.Scramble && f.Time == record.Time);
+        var recordToRemove = favorites.FirstOrDefault(f => f.Scramble == record.Scramble 
+                                                           && f.Time == record.Time
+                                                           && f.Puzzle == record.Puzzle);
         if (recordToRemove != null)
         {
             favorites.Remove(recordToRemove);
@@ -256,7 +343,9 @@
 
         foreach (var record in recordedTimes)
         {
-            if (favorites.Any(f => f.Scramble == record.Scramble && f.Time == record.Time))
+            if (favorites.Any(f => f.Scramble == record.Scramble 
+                                && f.Time == record.Time
+                                && f.Puzzle == record.Puzzle))
             {
                 record.IsFavorited = true;
             }
@@ -269,6 +358,7 @@
         Preferences.Set("Favorites", json);
     }
 
+    // Calculate Averages
     private void UpdateAverages()
     {
         if (recordedTimes.Count >= 5)
@@ -294,11 +384,13 @@
 
     private string CalculateWCAAverageAO5(List<Record> times)
     {
+        // Convert to numeric times, accounting for faults
         var timeValues = times
             .Select(t =>
             {
                 if (t.Fault == "DNF") return double.NaN;
-                double baseTime = double.Parse(t.Time);
+                if (!double.TryParse(t.Time, out var baseTime)) return double.NaN;
+
                 return t.Fault switch
                 {
                     "+2" => baseTime + 2,
@@ -306,14 +398,15 @@
                     _ => baseTime
                 };
             })
+            .OrderBy(t => double.IsNaN(t) ? double.MaxValue : t)
             .ToList();
 
-        timeValues = timeValues.OrderBy(t => double.IsNaN(t) ? double.MaxValue : t).ToList();
+        // WCA rules for Ao5
+        if (timeValues.Count(v => !double.IsNaN(v)) < 3) return "DNF";
+        if (timeValues.Count(v => double.IsNaN(v)) > 1) return "DNF";
 
-        if (timeValues.Count(t => !double.IsNaN(t)) < 3) return "DNF";
-        if (timeValues.Count(t => double.IsNaN(t)) > 1) return "DNF";
-
-        var validTimes = timeValues.Where(t => !double.IsNaN(t)).ToList();
+        var validTimes = timeValues.Where(v => !double.IsNaN(v)).ToList();
+        // Remove best and worst
         validTimes.RemoveAt(0);
         validTimes.RemoveAt(validTimes.Count - 1);
 
@@ -322,11 +415,13 @@
 
     private string CalculateWCAAverageAO12(List<Record> times)
     {
+        // Convert to numeric times, accounting for faults
         var timeValues = times
             .Select(t =>
             {
                 if (t.Fault == "DNF") return double.NaN;
-                double baseTime = double.Parse(t.Time);
+                if (!double.TryParse(t.Time, out var baseTime)) return double.NaN;
+
                 return t.Fault switch
                 {
                     "+2" => baseTime + 2,
@@ -334,14 +429,15 @@
                     _ => baseTime
                 };
             })
+            .OrderBy(t => double.IsNaN(t) ? double.MaxValue : t)
             .ToList();
 
-        timeValues = timeValues.OrderBy(t => double.IsNaN(t) ? double.MaxValue : t).ToList();
+        // WCA rules for Ao12
+        if (timeValues.Count(v => !double.IsNaN(v)) < 10) return "DNF";
+        if (timeValues.Count(v => double.IsNaN(v)) > 2) return "DNF";
 
-        if (timeValues.Count(t => !double.IsNaN(t)) < 10) return "DNF";
-        if (timeValues.Count(t => double.IsNaN(t)) > 2) return "DNF";
-
-        var validTimes = timeValues.Where(t => !double.IsNaN(t)).ToList();
+        var validTimes = timeValues.Where(v => !double.IsNaN(v)).ToList();
+        // Remove best and worst
         validTimes.RemoveAt(0);
         validTimes.RemoveAt(validTimes.Count - 1);
 
@@ -352,11 +448,13 @@
 
     private string GetFavoriteButtonText(Record record) => record.IsFavorited ? "Unfavorite" : "Favorite";
 
+    // Session Persistence
     private void LoadSessions()
     {
         var json = Preferences.Get("sessions", string.Empty);
-        sessions = string.IsNullOrEmpty(json) ? new List<string> { "Default" } :
-                   System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string> { "Default" };
+        sessions = string.IsNullOrEmpty(json) 
+            ? new List<string> { "Default" } 
+            : System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string> { "Default" };
     }
 
     private void SaveSessions()
@@ -379,15 +477,6 @@
         Preferences.Set(selectedSession, json);
     }
 
-    private async void OnSessionChanged(string? newValue)
-    {
-        selectedSession = newValue ?? "Default";
-        LoadSessionData();
-        LoadFavoritesStatus();
-        await JSRuntime.InvokeVoidAsync("blurElement");
-        StateHasChanged();
-    }
-
     [JSInvokable]
     public void OnSpacePressed()
     {
@@ -395,10 +484,12 @@
         else StartTimer();
     }
 
+    // Extended Record to hold Puzzle type
     public class Record
     {
         public string Scramble { get; set; } = string.Empty;
         public string Time { get; set; } = string.Empty;
+        public string Puzzle { get; set; } = "3x3"; // default
         public bool IsFavorited { get; set; } = false;
         public string Fault { get; set; } = string.Empty;
     }
